@@ -103,35 +103,40 @@
 		const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 		let eventCount = 0;
 		let started = false;
+		let preferredSource = null; // 'orientation' | 'motion'
+		let lastOrientationTs = 0;
+		let lastMotionTs = 0;
 
-		// Maps pitch to vertical position: vertical (|pitch|≈90°)=>50%; horizontal (pitch≈0°)=>0%/100%
-		function updateFromPitch(pitchDeg) {
-			// We want: vertical -> center (50%), horizontal -> edges (0%/100%).
-			// pitchDeg here should be beta-like: 0≈horizontal, ±90≈vertical.
-			const sign = Math.sign(pitchDeg) || 1; // negative -> move toward top
-			const towardEdge = clamp(1 - Math.abs(pitchDeg) / 90, 0, 1); // 1 at horizontal, 0 at vertical
-			const offset = sign * towardEdge * 50; // percent of container height
+		// Filtering and animation state
+		let targetPitch = 0;         // degrees, mapped beta-like
+		let filteredPitch = 0;       // degrees
+		const alpha = 0.2;           // low-pass smoothing factor (0..1)
+		const deadzoneDeg = 0.3;     // ignore micro jitter
+		let rafId = null;
+
+		// Maps pitch to vertical position: vertical (|pitch|≈90°)=>center; horizontal (≈0°)=>edges
+		function renderFromPitch(pitchDeg) {
+			const sign = Math.sign(pitchDeg) || 1;
+			const towardEdge = clamp(1 - Math.abs(pitchDeg) / 90, 0, 1);
+			const offset = sign * towardEdge * 50; // percent of height
 			const yPercent = clamp(50 + offset, 0, 100);
-			line.style.top = yPercent + '%';
-			line.style.transform = 'translate3d(0, -50%, 0)';
-			dbg.textContent = `mapped beta/pitch: ${pitchDeg.toFixed(1)}°, y: ${yPercent.toFixed(1)}%`;
+			const yPx = ((yPercent - 50) / 100) * window.innerHeight;
+			line.style.transform = `translate3d(0, ${yPx}px, 0)`;
+			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° y:${yPercent.toFixed(1)}% events:${eventCount}`;
 		}
 
 		function onOrientation(e) {
 			if (e.beta == null) return;
-			// Normalize beta to [-180,180]
 			let b = e.beta;
-			// Convert to a value where 0≈horizontal, ±90≈vertical
-			// distance from nearest vertical: v in [0,90]
 			const v = 90 - Math.abs(Math.abs(b) - 90);
-			// sign: which side to move (top vs bottom)
 			const sign = b >= 0 ? 1 : -1;
-			const mapped = sign * v; // keep sign for direction
+			const mapped = sign * v;
 			eventCount++;
-			updateFromPitch(mapped);
+			preferredSource = 'orientation';
+			lastOrientationTs = performance.now();
+			targetPitch = mapped;
 		}
 
-		// Some Android devices only fire deviceorientationabsolute
 		function onOrientationAbsolute(e) {
 			if (e.beta == null) return;
 			eventCount++;
@@ -142,13 +147,14 @@
 			const g = e.accelerationIncludingGravity;
 			if (!g) return;
 			const ax = g.x || 0; const ay = g.y || 0; const az = g.z || 0;
-			// Pitch approximation from accelerometer with gravity
 			const pitchRad = Math.atan2(-ax, Math.hypot(ay, az));
-			// Convert so that 0≈horizontal, ±90≈vertical similar to beta mapping above
-			const betaLike = (Math.abs(pitchRad) * 180 / Math.PI); // [0..90]
-			const sign = pitchRad >= 0 ? -1 : 1; // approximate direction (device axes vary)
+			const betaLike = (Math.abs(pitchRad) * 180 / Math.PI);
+			const sign = pitchRad >= 0 ? -1 : 1;
 			eventCount++;
-			updateFromPitch(sign * betaLike);
+			if (preferredSource === 'orientation' && performance.now() - lastOrientationTs < 250) return;
+			preferredSource = 'motion';
+			lastMotionTs = performance.now();
+			targetPitch = sign * betaLike;
 		}
 
 		function start() {
@@ -179,6 +185,18 @@
 					overlay.innerHTML = '<div style="max-width:260px">No motion events detected. Open this page over HTTPS or on localhost, then tap Enable Motion. Some browsers block sensors on file:// URLs.</div>';
 				}
 			}, 3000);
+
+			// Animation loop with low-pass filtering
+			const tick = () => {
+				const delta = targetPitch - filteredPitch;
+				if (Math.abs(delta) > 0.001) {
+					filteredPitch += delta * alpha;
+				}
+				const displayed = Math.abs(filteredPitch) < deadzoneDeg ? 0 : filteredPitch;
+				renderFromPitch(displayed);
+				req = requestAnimationFrame(tick);
+			};
+			let req = requestAnimationFrame(tick);
 		}
 
 		enableBtn.addEventListener('click', start);
