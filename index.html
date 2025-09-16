@@ -82,26 +82,20 @@
             }
 
             // Define a threshold for alignment (e.g., +/- 2.5 degrees from 90)
-            const alignmentThreshold = 0;
+            const alignmentThreshold = 2.5;
             const isAligned = beta > (90 - alignmentThreshold) && beta < (90 + alignmentThreshold);
 
+            // Always compute the line position continuously so no angles are skipped
+            // Normalize beta to a 0-1 range (0 to 180 degrees)
+            let percentage = beta / 180;
+            percentage = Math.max(0, Math.min(1, percentage));
+            line.style.top = `${percentage * 100}%`;
+
+            // Only toggle visual feedback; do not snap position
             if (isAligned) {
-                // When aligned, snap the line to the exact center and provide visual feedback.
-                line.style.top = '50%';
                 line.classList.add('aligned');
                 alignmentStatus.textContent = 'Perfectly Aligned!';
             } else {
-                // Otherwise, calculate the position normally.
-                // Normalize beta to a 0-1 range (0 to 180 degrees)
-                let percentage = beta / 180;
-
-                // Clamp the value between 0 and 1
-                percentage = Math.max(0, Math.min(1, percentage));
-
-                // Update the line's top position
-                line.style.top = `${percentage * 100}%`;
-
-                // Remove the aligned state
                 line.classList.remove('aligned');
                 alignmentStatus.textContent = '';
             }
