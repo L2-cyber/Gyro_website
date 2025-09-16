@@ -13,7 +13,12 @@
             touch-action: none; /* Prevents scrolling on touch devices */
         }
         #reactive-line {
-            transition: top 0.1s ease-out;
+            transition: top 0.1s ease-out, background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        /* Style for when the line is perfectly aligned */
+        #reactive-line.aligned {
+            background-color: #4ade80; /* Tailwind's green-400 */
+            box-shadow: 0 0 25px rgba(74, 222, 128, 0.9);
         }
     </style>
 </head>
@@ -31,7 +36,8 @@
 
         <!-- Onboarding and Data Display -->
         <div id="info-display" class="text-center z-10 bg-gray-900 bg-opacity-70 p-6 rounded-lg">
-            <p id="instructions" class="text-lg mb-4">Click the button below to activate the motion sensors.</p>
+            <p id="instructions" class="text-lg mb-2">Click the button below to activate the motion sensors.</p>
+            <p id="alignment-status" class="text-2xl font-bold text-green-400 h-8 mb-2"></p>
             <button id="permission-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
                 Activate Sensors
             </button>
@@ -54,6 +60,7 @@
         const dataContainer = document.getElementById('data-container');
         const betaValue = document.getElementById('beta-value');
         const errorMessage = document.getElementById('error-message');
+        const alignmentStatus = document.getElementById('alignment-status');
 
         // This function sets up the event listener after permission is granted.
         function startListening() {
@@ -66,7 +73,6 @@
         // The main function to handle device orientation changes.
         function handleOrientation(event) {
             // Beta is the front-to-back tilt.
-            // Range is -180 to 180. We'll focus on the 0-180 range for simplicity.
             let beta = event.beta;
 
             // Handle potential null values for beta
@@ -75,20 +81,33 @@
                 return;
             }
 
-            // Normalize beta to a 0-1 range (0 to 180 degrees)
-            // 90 degrees (vertical) = 50%
-            // 0 degrees (horizontal, facing up) = 0%
-            // 180 degrees (horizontal, facing down) = 100%
-            let percentage = beta / 180;
+            // Define a threshold for alignment (e.g., +/- 2.5 degrees from 90)
+            const alignmentThreshold = 2.5;
+            const isAligned = beta > (90 - alignmentThreshold) && beta < (90 + alignmentThreshold);
 
-            // Clamp the value between 0 and 1 to prevent the line from going off-screen
-            percentage = Math.max(0, Math.min(1, percentage));
+            if (isAligned) {
+                // When aligned, snap the line to the exact center and provide visual feedback.
+                line.style.top = '50%';
+                line.classList.add('aligned');
+                alignmentStatus.textContent = 'Perfectly Aligned!';
+            } else {
+                // Otherwise, calculate the position normally.
+                // Normalize beta to a 0-1 range (0 to 180 degrees)
+                let percentage = beta / 180;
 
-            // Update the line's top position
-            line.style.top = `${percentage * 100}%`;
+                // Clamp the value between 0 and 1
+                percentage = Math.max(0, Math.min(1, percentage));
 
-            // Update the data display
-            betaValue.textContent = Math.round(beta);
+                // Update the line's top position
+                line.style.top = `${percentage * 100}%`;
+
+                // Remove the aligned state
+                line.classList.remove('aligned');
+                alignmentStatus.textContent = '';
+            }
+
+            // Update the data display with more precision
+            betaValue.textContent = beta.toFixed(2);
         }
 
         // Handle the permission button click
@@ -112,3 +131,4 @@
     </script>
 </body>
 </html>
+
