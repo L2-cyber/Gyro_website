@@ -33,15 +33,15 @@
     <main id="main-content" class="relative flex-grow w-full max-w-2xl mx-auto flex flex-col justify-center items-center p-4">
         <!-- The reactive line that moves -->
         <div id="reactive-line" class="absolute h-1 w-full bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(56,189,248,0.8)]" style="top: 50%;"></div>
+        <!-- The alignment guide band and center line -->
+        <div id="guide-band" class="absolute w-full bg-gray-600 bg-opacity-30 rounded" style="top: 50%; transform: translateY(-50%);"></div>
+        <div id="guide-center" class="absolute h-0.5 w-full bg-gray-400" style="top: 50%; transform: translateY(-50%);"></div>
 
         <!-- Onboarding and Data Display -->
         <div id="info-display" class="text-center z-10 bg-gray-900 bg-opacity-70 p-6 rounded-lg">
-            <p id="instructions" class="text-lg mb-2">Click the button below to activate the motion sensors.</p>
+            <p id="instructions" class="text-lg mb-2">Tilt your phone to align the cyan line with the grey target.</p>
             <p id="alignment-status" class="text-2xl font-bold text-green-400 h-8 mb-2"></p>
-            <button id="permission-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
-                Activate Sensors
-            </button>
-            <div id="data-container" class="hidden mt-4 text-sm text-gray-400">
+            <div id="data-container" class="mt-4 text-sm text-gray-400">
                 <p>Beta (Tilt Angle): <span id="beta-value" class="font-mono">...</span></p>
                 <p id="error-message" class="text-red-400 mt-2"></p>
             </div>
@@ -55,19 +55,26 @@
 
     <script>
         const line = document.getElementById('reactive-line');
-        const permissionBtn = document.getElementById('permission-btn');
         const instructions = document.getElementById('instructions');
         const dataContainer = document.getElementById('data-container');
         const betaValue = document.getElementById('beta-value');
         const errorMessage = document.getElementById('error-message');
         const alignmentStatus = document.getElementById('alignment-status');
+        const guideBand = document.getElementById('guide-band');
+        const guideCenter = document.getElementById('guide-center');
+
+        // Define a threshold for alignment (e.g., +/- 1.5 degrees from 90)
+        const alignmentThreshold = 1.5;
+
+        // Size the guide band to represent the full threshold range
+        function sizeGuideBand() {
+            const percentHeight = (alignmentThreshold * 2) / 180 * 100; // full range +/- threshold
+            guideBand.style.height = `${percentHeight}%`;
+        }
 
         // This function sets up the event listener after permission is granted.
         function startListening() {
             window.addEventListener('deviceorientation', handleOrientation);
-            permissionBtn.style.display = 'none';
-            instructions.textContent = 'Now, tilt your phone!';
-            dataContainer.classList.remove('hidden');
         }
 
         // The main function to handle device orientation changes.
@@ -81,8 +88,6 @@
                 return;
             }
 
-            // Define a threshold for alignment (e.g., +/- 2.5 degrees from 90)
-            const alignmentThreshold = 1.5;
             const isAligned = beta > (90 - alignmentThreshold) && beta < (90 + alignmentThreshold);
 
             // Always compute the line position continuously so no angles are skipped
@@ -104,21 +109,23 @@
             betaValue.textContent = beta.toFixed(2);
         }
 
-        // Handle the permission button click
-        permissionBtn.addEventListener('click', () => {
-            // For iOS 13+ devices, we need to explicitly request permission.
+        // Auto-start on load. iOS may still require a user gesture; show guidance if blocked.
+        document.addEventListener('DOMContentLoaded', () => {
+            sizeGuideBand();
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
                     .then(permissionState => {
                         if (permissionState === 'granted') {
                             startListening();
+                            instructions.textContent = 'Tilt your phone to align the cyan line with the grey target.';
                         } else {
-                            errorMessage.textContent = 'Permission not granted. Please enable motion sensors in your browser settings.';
+                            errorMessage.textContent = 'Motion permission blocked. On iOS, tap the address bar → AA → Website Settings → Allow Motion & Orientation Access, then reload.';
                         }
                     })
-                    .catch(console.error);
+                    .catch(() => {
+                        errorMessage.textContent = 'Unable to request motion permission. Please enable motion sensors in browser settings and reload.';
+                    });
             } else {
-                // For other devices (like Android), we can just start listening.
                 startListening();
             }
         });
