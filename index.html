@@ -1,231 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Reactive Level Line</title>
-	<style>
-		* { box-sizing: border-box; }
-		html, body { height: 100%; }
-		body {
-			margin: 0;
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
-			background: #0f172a; /* slate-900 */
-			color: #e5e7eb; /* gray-200 */
-			touch-action: none;
-			overflow: hidden;
-		}
-
-		.container {
-			position: relative;
-			width: 100vw;
-			height: 100vh;
-		}
-
-		.center-guide { /* optional fixed center line */
-			position: absolute;
-			top: 50%;
-			left: 0;
-			width: 100%;
-			height: 2px;
-			transform: translateY(-50%);
-			background: rgba(148,163,184,0.35);
-		}
-
-		.moving-line {
-			position: absolute;
-			top: 50%;
-			left: 0;
-			width: 100%;
-			height: 4px;
-			background: #9ca3af; /* gray-400 */
-			border-radius: 2px;
-			transform: translate3d(0, -50%, 0);
-			transition: background-color 0.2s ease;
-		}
-
-		.header {
-			position: absolute;
-			top: 12px;
-			left: 50%;
-			transform: translateX(-50%);
-			font-weight: 600;
-			font-size: 16px;
-			text-align: center;
-			opacity: 0.9;
-		}
-
-		.overlay {
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			background: #111827;
-			padding: 16px 20px;
-			border-radius: 10px;
-			box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-			text-align: center;
-		}
-
-		.button {
-			appearance: none;
-			border: none;
-			background: #8b5cf6;
-			color: white;
-			padding: 10px 14px;
-			border-radius: 8px;
-			font-weight: 700;
-			margin-top: 8px;
-		}
-
-		.debug { position: absolute; bottom: 10px; left: 10px; font-size: 12px; opacity: .6; }
-	</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tilt-Reactive Line</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: none; /* Prevents scrolling on touch devices */
+        }
+        #reactive-line {
+            transition: top 0.1s ease-out;
+        }
+    </style>
 </head>
-<body>
-	<div class="container">
-		<div class="header" id="header">Tilt phone: line centers when vertical; moves to edges when horizontal.</div>
-		<div id="center" class="center-guide"></div>
-		<div id="line" class="moving-line"></div>
-		<div id="overlay" class="overlay">
-			<div>Tap to enable motion sensors</div>
-			<button id="enable" class="button">Enable Motion</button>
-			<div style="margin-top:6px;font-size:12px;opacity:.75">Some browsers require a user gesture.</div>
-		</div>
-		<div id="dbg" class="debug" hidden></div>
-	</div>
+<body class="bg-gray-900 text-white flex flex-col h-screen overflow-hidden">
 
-	<script>
-		const line = document.getElementById('line');
-		const overlay = document.getElementById('overlay');
-		const enableBtn = document.getElementById('enable');
-		const dbg = document.getElementById('dbg');
-		const header = document.getElementById('header');
+    <!-- Header -->
+    <header class="bg-gray-800 shadow-lg w-full text-center p-4 z-10">
+        <h1 class="text-2xl font-bold tracking-wider">Tilt-Reactive Line</h1>
+    </header>
 
-		const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-		let eventCount = 0;
-		let started = false;
-		let preferredSource = null; // 'orientation' | 'motion'
-		let lastOrientationTs = 0;
-		let lastMotionTs = 0;
+    <!-- Main Content Area -->
+    <main id="main-content" class="relative flex-grow w-full max-w-2xl mx-auto flex flex-col justify-center items-center p-4">
+        <!-- The reactive line that moves -->
+        <div id="reactive-line" class="absolute h-1 w-full bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(56,189,248,0.8)]" style="top: 50%;"></div>
 
-		// Layout bounds for movement
-		let topBoundPx = 0;      // lowest y the line may reach (just below header)
-		let bottomBoundPx = 0;   // highest y the line may reach (just above bottom)
-		let centerYPx = 0;       // midpoint between bounds
-		let halfRangePx = 0;     // (bottomBoundPx - topBoundPx) / 2
-		const topMarginPx = 8;   // small padding below header
-		const bottomMarginPx = 8;// small padding above bottom
+        <!-- Onboarding and Data Display -->
+        <div id="info-display" class="text-center z-10 bg-gray-900 bg-opacity-70 p-6 rounded-lg">
+            <p id="instructions" class="text-lg mb-4">Click the button below to activate the motion sensors.</p>
+            <button id="permission-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
+                Activate Sensors
+            </button>
+            <div id="data-container" class="hidden mt-4 text-sm text-gray-400">
+                <p>Beta (Tilt Angle): <span id="beta-value" class="font-mono">...</span></p>
+                <p id="error-message" class="text-red-400 mt-2"></p>
+            </div>
+        </div>
+    </main>
 
-		function computeBounds() {
-			const headerBottom = header.getBoundingClientRect().bottom;
-			topBoundPx = Math.min(window.innerHeight - 20, headerBottom + topMarginPx);
-			bottomBoundPx = Math.max(topBoundPx + 20, window.innerHeight - bottomMarginPx);
-			centerYPx = (topBoundPx + bottomBoundPx) / 2;
-			halfRangePx = (bottomBoundPx - topBoundPx) / 2;
-			// Position the line's base at the computed center of the allowed band
-			line.style.top = centerYPx + 'px';
-			line.style.transform = 'translate3d(0, -50%, 0)';
-		}
+    <!-- Footer -->
+    <footer class="bg-gray-800 shadow-lg w-full text-center p-4 z-10">
+        <p class="text-sm text-gray-400">Tilt your device vertically. The line moves from top to bottom.</p>
+    </footer>
 
-		window.addEventListener('resize', computeBounds);
-		window.addEventListener('orientationchange', () => setTimeout(computeBounds, 250));
-		document.addEventListener('DOMContentLoaded', computeBounds);
+    <script>
+        const line = document.getElementById('reactive-line');
+        const permissionBtn = document.getElementById('permission-btn');
+        const instructions = document.getElementById('instructions');
+        const dataContainer = document.getElementById('data-container');
+        const betaValue = document.getElementById('beta-value');
+        const errorMessage = document.getElementById('error-message');
 
-		// Filtering and animation state
-		let targetPitch = 0;         // degrees, mapped beta-like
-		let filteredPitch = 0;       // degrees
-		const alpha = 0.2;           // low-pass smoothing factor (0..1)
-		const deadzoneDeg = 0.3;     // ignore micro jitter
-		let rafId = null;
+        // This function sets up the event listener after permission is granted.
+        function startListening() {
+            window.addEventListener('deviceorientation', handleOrientation);
+            permissionBtn.style.display = 'none';
+            instructions.textContent = 'Now, tilt your phone!';
+            dataContainer.classList.remove('hidden');
+        }
 
-		// Render mapped to pixel offset within [topBoundPx, bottomBoundPx]
-		function renderFromPitch(pitchDeg) {
-			const sign = Math.sign(pitchDeg) || 1;
-			const towardEdge = clamp(1 - Math.abs(pitchDeg) / 90, 0, 1);
-			const offsetFactor = sign * towardEdge; // -1..1
-			const yPxFromCenter = offsetFactor * halfRangePx;
-			// Translate from band center; keep -50% centering of the element
-			line.style.transform = `translate3d(0, ${yPxFromCenter}px, 0) translateY(-50%)`;
-			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° range:[${Math.round(topBoundPx)}..${Math.round(bottomBoundPx)}] center:${Math.round(centerYPx)}`;
-		}
+        // The main function to handle device orientation changes.
+        function handleOrientation(event) {
+            // Beta is the front-to-back tilt.
+            // Range is -180 to 180. We'll focus on the 0-180 range for simplicity.
+            let beta = event.beta;
 
-		function onOrientation(e) {
-			if (e.beta == null) return;
-			let b = e.beta;
-			const v = 90 - Math.abs(Math.abs(b) - 90);
-			const sign = b >= 0 ? 1 : -1;
-			const mapped = sign * v;
-			eventCount++;
-			preferredSource = 'orientation';
-			lastOrientationTs = performance.now();
-			targetPitch = mapped;
-		}
+            // Handle potential null values for beta
+            if (beta === null) {
+                errorMessage.textContent = 'Could not read beta value from device.';
+                return;
+            }
 
-		function onOrientationAbsolute(e) {
-			if (e.beta == null) return;
-			eventCount++;
-			onOrientation(e);
-		}
+            // Normalize beta to a 0-1 range (0 to 180 degrees)
+            // 90 degrees (vertical) = 50%
+            // 0 degrees (horizontal, facing up) = 0%
+            // 180 degrees (horizontal, facing down) = 100%
+            let percentage = beta / 180;
 
-		function onMotion(e) {
-			const g = e.accelerationIncludingGravity;
-			if (!g) return;
-			const ax = g.x || 0; const ay = g.y || 0; const az = g.z || 0;
-			const pitchRad = Math.atan2(-ax, Math.hypot(ay, az));
-			const betaLike = (Math.abs(pitchRad) * 180 / Math.PI);
-			const sign = pitchRad >= 0 ? -1 : 1;
-			eventCount++;
-			if (preferredSource === 'orientation' && performance.now() - lastOrientationTs < 250) return;
-			preferredSource = 'motion';
-			lastMotionTs = performance.now();
-			targetPitch = sign * betaLike;
-		}
+            // Clamp the value between 0 and 1 to prevent the line from going off-screen
+            percentage = Math.max(0, Math.min(1, percentage));
 
-		function start() {
-			if (started) return; started = true;
-			computeBounds();
-			const needsPerm = window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
-			if (needsPerm) {
-				DeviceOrientationEvent.requestPermission().then(state => {
-					if (state === 'granted') {
-						window.addEventListener('deviceorientation', onOrientation, true);
-						window.addEventListener('deviceorientationabsolute', onOrientationAbsolute, true);
-						window.addEventListener('devicemotion', onMotion, true);
-						overlay.style.display = 'none';
-						dbg.hidden = false;
-					}
-				}).catch(() => {});
-			} else {
-				window.addEventListener('deviceorientation', onOrientation, true);
-				window.addEventListener('deviceorientationabsolute', onOrientationAbsolute, true);
-				window.addEventListener('devicemotion', onMotion, true);
-				overlay.style.display = 'none';
-				dbg.hidden = false;
-			}
+            // Update the line's top position
+            line.style.top = `${percentage * 100}%`;
 
-			// Watchdog: if no events after 3s, show guidance
-			setTimeout(() => {
-				if (eventCount === 0) {
-					overlay.style.display = 'block';
-					overlay.innerHTML = '<div style="max-width:260px">No motion events detected. Open this page over HTTPS or on localhost, then tap Enable Motion. Some browsers block sensors on file:// URLs.</div>';
-				}
-			}, 3000);
+            // Update the data display
+            betaValue.textContent = Math.round(beta);
+        }
 
-			// Animation loop with low-pass filtering
-			const tick = () => {
-				const delta = targetPitch - filteredPitch;
-				if (Math.abs(delta) > 0.001) {
-					filteredPitch += delta * 0.2;
-				}
-				const displayed = Math.abs(filteredPitch) < 0.3 ? 0 : filteredPitch;
-				renderFromPitch(displayed);
-				req = requestAnimationFrame(tick);
-			};
-			let req = requestAnimationFrame(tick);
-		}
-
-		enableBtn.addEventListener('click', start);
-	</script>
+        // Handle the permission button click
+        permissionBtn.addEventListener('click', () => {
+            // For iOS 13+ devices, we need to explicitly request permission.
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            startListening();
+                        } else {
+                            errorMessage.textContent = 'Permission not granted. Please enable motion sensors in your browser settings.';
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // For other devices (like Android), we can just start listening.
+                startListening();
+            }
+        });
+    </script>
 </body>
 </html>
-
