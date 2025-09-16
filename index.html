@@ -122,6 +122,9 @@
 			bottomBoundPx = Math.max(topBoundPx + 20, window.innerHeight - bottomMarginPx);
 			centerYPx = (topBoundPx + bottomBoundPx) / 2;
 			halfRangePx = (bottomBoundPx - topBoundPx) / 2;
+			// Position the line's base at the computed center of the allowed band
+			line.style.top = centerYPx + 'px';
+			line.style.transform = 'translate3d(0, -50%, 0)';
 		}
 
 		window.addEventListener('resize', computeBounds);
@@ -141,9 +144,9 @@
 			const towardEdge = clamp(1 - Math.abs(pitchDeg) / 90, 0, 1);
 			const offsetFactor = sign * towardEdge; // -1..1
 			const yPxFromCenter = offsetFactor * halfRangePx;
-			// Element is positioned with top:50%; translate from center + keep -50% for centering thickness
+			// Translate from band center; keep -50% centering of the element
 			line.style.transform = `translate3d(0, ${yPxFromCenter}px, 0) translateY(-50%)`;
-			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° range:[${Math.round(topBoundPx)}..${Math.round(bottomBoundPx)}]`;
+			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° range:[${Math.round(topBoundPx)}..${Math.round(bottomBoundPx)}] center:${Math.round(centerYPx)}`;
 		}
 
 		function onOrientation(e) {
@@ -212,9 +215,9 @@
 			const tick = () => {
 				const delta = targetPitch - filteredPitch;
 				if (Math.abs(delta) > 0.001) {
-					filteredPitch += delta * alpha;
+					filteredPitch += delta * 0.2;
 				}
-				const displayed = Math.abs(filteredPitch) < deadzoneDeg ? 0 : filteredPitch;
+				const displayed = Math.abs(filteredPitch) < 0.3 ? 0 : filteredPitch;
 				renderFromPitch(displayed);
 				req = requestAnimationFrame(tick);
 			};
