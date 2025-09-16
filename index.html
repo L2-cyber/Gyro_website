@@ -83,7 +83,7 @@
 </head>
 <body>
 	<div class="container">
-		<div class="header">Tilt phone: line centers when vertical; moves to edges when horizontal.</div>
+		<div class="header" id="header">Tilt phone: line centers when vertical; moves to edges when horizontal.</div>
 		<div id="center" class="center-guide"></div>
 		<div id="line" class="moving-line"></div>
 		<div id="overlay" class="overlay">
@@ -99,6 +99,7 @@
 		const overlay = document.getElementById('overlay');
 		const enableBtn = document.getElementById('enable');
 		const dbg = document.getElementById('dbg');
+		const header = document.getElementById('header');
 
 		const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 		let eventCount = 0;
@@ -107,6 +108,26 @@
 		let lastOrientationTs = 0;
 		let lastMotionTs = 0;
 
+		// Layout bounds for movement
+		let topBoundPx = 0;      // lowest y the line may reach (just below header)
+		let bottomBoundPx = 0;   // highest y the line may reach (just above bottom)
+		let centerYPx = 0;       // midpoint between bounds
+		let halfRangePx = 0;     // (bottomBoundPx - topBoundPx) / 2
+		const topMarginPx = 8;   // small padding below header
+		const bottomMarginPx = 8;// small padding above bottom
+
+		function computeBounds() {
+			const headerBottom = header.getBoundingClientRect().bottom;
+			topBoundPx = Math.min(window.innerHeight - 20, headerBottom + topMarginPx);
+			bottomBoundPx = Math.max(topBoundPx + 20, window.innerHeight - bottomMarginPx);
+			centerYPx = (topBoundPx + bottomBoundPx) / 2;
+			halfRangePx = (bottomBoundPx - topBoundPx) / 2;
+		}
+
+		window.addEventListener('resize', computeBounds);
+		window.addEventListener('orientationchange', () => setTimeout(computeBounds, 250));
+		document.addEventListener('DOMContentLoaded', computeBounds);
+
 		// Filtering and animation state
 		let targetPitch = 0;         // degrees, mapped beta-like
 		let filteredPitch = 0;       // degrees
@@ -114,15 +135,15 @@
 		const deadzoneDeg = 0.3;     // ignore micro jitter
 		let rafId = null;
 
-		// Maps pitch to vertical position: vertical (|pitch|≈90°)=>center; horizontal (≈0°)=>edges
+		// Render mapped to pixel offset within [topBoundPx, bottomBoundPx]
 		function renderFromPitch(pitchDeg) {
 			const sign = Math.sign(pitchDeg) || 1;
 			const towardEdge = clamp(1 - Math.abs(pitchDeg) / 90, 0, 1);
-			const offset = sign * towardEdge * 50; // percent of height
-			const yPercent = clamp(50 + offset, 0, 100);
-			const yPx = ((yPercent - 50) / 100) * window.innerHeight;
-			line.style.transform = `translate3d(0, ${yPx}px, 0)`;
-			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° y:${yPercent.toFixed(1)}% events:${eventCount}`;
+			const offsetFactor = sign * towardEdge; // -1..1
+			const yPxFromCenter = offsetFactor * halfRangePx;
+			// Element is positioned with top:50%; translate from center + keep -50% for centering thickness
+			line.style.transform = `translate3d(0, ${yPxFromCenter}px, 0) translateY(-50%)`;
+			dbg.textContent = `src:${preferredSource||'-'} pitch:${pitchDeg.toFixed(1)}° range:[${Math.round(topBoundPx)}..${Math.round(bottomBoundPx)}]`;
 		}
 
 		function onOrientation(e) {
@@ -159,6 +180,7 @@
 
 		function start() {
 			if (started) return; started = true;
+			computeBounds();
 			const needsPerm = window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
 			if (needsPerm) {
 				DeviceOrientationEvent.requestPermission().then(state => {
