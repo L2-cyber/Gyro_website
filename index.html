@@ -35,17 +35,9 @@
         <div id="reactive-line" class="absolute h-1 w-full bg-gray-400 rounded-full shadow-[0_0_15px_rgba(56,189,248,0.8)]" style="top: 50%;"></div>
         <!-- The alignment guide band -->
         <div id="guide-band" class="absolute w-full bg-gray-600 bg-opacity-30 rounded" style="top: 50%; transform: translateY(-50%);"></div>
-        
 
-        <!-- Onboarding and Data Display -->
-        <div id="info-display" class="text-center z-10 bg-gray-900 bg-opacity-70 p-6 rounded-lg">
-            <p id="instructions" class="text-lg mb-2">Tilt your phone to align the grey line with the grey target.</p>
-            <p id="alignment-status" class="text-2xl font-bold text-green-400 h-8 mb-2"></p>
-            <div id="data-container" class="mt-4 text-sm text-gray-400">
-                <p>Beta (Tilt Angle): <span id="beta-value" class="font-mono">...</span></p>
-                <p id="error-message" class="text-red-400 mt-2"></p>
-            </div>
-        </div>
+        <!-- Status square: starts grey, turns fully opaque purple when aligned -->
+        <div id="status-square" class="z-10 w-24 h-24 rounded bg-gray-600 bg-opacity-70 transition-all duration-300"></div>
     </main>
 
     <!-- Footer -->
@@ -55,11 +47,7 @@
 
     <script>
         const line = document.getElementById('reactive-line');
-        const instructions = document.getElementById('instructions');
-        const dataContainer = document.getElementById('data-container');
-        const betaValue = document.getElementById('beta-value');
-        const errorMessage = document.getElementById('error-message');
-        const alignmentStatus = document.getElementById('alignment-status');
+        const statusSquare = document.getElementById('status-square');
         const guideBand = document.getElementById('guide-band');
         
 
@@ -83,10 +71,7 @@
             let beta = event.beta;
 
             // Handle potential null values for beta
-            if (beta === null) {
-                errorMessage.textContent = 'Could not read beta value from device.';
-                return;
-            }
+            if (beta === null) { return; }
 
             const isAligned = beta > (90 - alignmentThreshold) && beta < (90 + alignmentThreshold);
 
@@ -99,14 +84,15 @@
             // Only toggle visual feedback; do not snap position
             if (isAligned) {
                 line.classList.add('aligned');
-                alignmentStatus.textContent = 'Perfectly Aligned!';
+                statusSquare.classList.remove('bg-gray-600', 'bg-opacity-70');
+                statusSquare.classList.add('bg-purple-600', 'bg-opacity-100', 'shadow-[0_0_25px_rgba(168,85,247,0.9)]');
             } else {
                 line.classList.remove('aligned');
-                alignmentStatus.textContent = '';
+                statusSquare.classList.remove('bg-purple-600', 'bg-opacity-100', 'shadow-[0_0_25px_rgba(168,85,247,0.9)]');
+                statusSquare.classList.add('bg-gray-600', 'bg-opacity-70');
             }
 
-            // Update the data display with more precision
-            betaValue.textContent = beta.toFixed(2);
+            // No numeric display
         }
 
         // Auto-start on load. iOS may still require a user gesture; show guidance if blocked.
@@ -117,13 +103,12 @@
                     .then(permissionState => {
                         if (permissionState === 'granted') {
                             startListening();
-                            instructions.textContent = 'Tilt your phone to align the cyan line with the grey target.';
                         } else {
-                            errorMessage.textContent = 'Motion permission blocked. On iOS, tap the address bar → AA → Website Settings → Allow Motion & Orientation Access, then reload.';
+                            console.warn('Motion permission blocked. On iOS, enable Motion & Orientation Access for this site and reload.');
                         }
                     })
                     .catch(() => {
-                        errorMessage.textContent = 'Unable to request motion permission. Please enable motion sensors in browser settings and reload.';
+                        console.warn('Unable to request motion permission. Enable motion sensors in browser settings and reload.');
                     });
             } else {
                 startListening();
@@ -132,6 +117,4 @@
     </script>
 </body>
 </html>
-
-
 
